@@ -47,10 +47,14 @@ def main() -> None:
     hf = hf_["HRV_HF"].iloc[0]
     lfhf = hf_["HRV_LFHF"].iloc[0]
     mean_hr = 60000 / rr.mean()
+    # Poincaré SD1/SD2（直接由 RR 序列計算）
+    sd1 = np.std(np.diff(rr), ddof=1) / np.sqrt(2)
+    sd2 = np.std(rr[1:] + rr[:-1], ddof=1) / np.sqrt(2)
 
-    # ---- 圖：2x2 版面 ----
-    fig = plt.figure(figsize=(15, 10))
-    gs = fig.add_gridspec(3, 2, height_ratios=[1.1, 1, 1])
+    # ---- 圖：上兩排跨欄 + 底排三格 ----
+    fig = plt.figure(figsize=(17, 10))
+    gs = fig.add_gridspec(3, 3, height_ratios=[1.1, 1, 1.15],
+                          width_ratios=[1.1, 1, 0.75])
 
     # (1) ECG 全程 + R 波（上排跨兩欄）
     ax1 = fig.add_subplot(gs[0, :])
@@ -95,8 +99,27 @@ def main() -> None:
     ax3.legend(fontsize=9)
     ax3.grid(alpha=0.25)
 
-    # (4) 指標摘要
-    ax4 = fig.add_subplot(gs[2, 1])
+    # (4) 龐加萊圖
+    ax5 = fig.add_subplot(gs[2, 1])
+    x, y = rr[:-1], rr[1:]
+    ax5.scatter(x, y, s=10, alpha=0.5, color="tab:blue", edgecolors="none")
+    lim = [min(x.min(), y.min()) - 30, max(x.max(), y.max()) + 30]
+    ax5.plot(lim, lim, "--", color="gray", lw=1)
+    m = rr.mean()
+    th = np.linspace(0, 2 * np.pi, 100)
+    c45, s45 = np.cos(np.pi / 4), np.sin(np.pi / 4)
+    ex = m + sd2 * np.cos(th) * c45 - sd1 * np.sin(th) * s45
+    ey = m + sd2 * np.cos(th) * s45 + sd1 * np.sin(th) * c45
+    ax5.plot(ex, ey, color="tab:red", lw=1.8)
+    ax5.set_xlim(lim); ax5.set_ylim(lim)
+    ax5.set_aspect("equal")
+    ax5.set_xlabel("RR(n) (ms)")
+    ax5.set_ylabel("RR(n+1) (ms)")
+    ax5.set_title(f"Poincaré  (SD1 {sd1:.1f} / SD2 {sd2:.1f} ms)")
+    ax5.grid(alpha=0.25)
+
+    # (5) 指標摘要
+    ax4 = fig.add_subplot(gs[2, 2])
     ax4.axis("off")
     summary = (
         f"Recording   {args.csv}\n"
@@ -110,10 +133,14 @@ def main() -> None:
         f"\n─ Frequency domain ────────\n"
         f"LF          {lf:.1f} ms²\n"
         f"HF          {hf:.1f} ms²\n"
-        f"LF/HF       {lfhf:.3f}"
+        f"LF/HF       {lfhf:.3f}\n"
+        f"\n─ Poincaré ────────────────\n"
+        f"SD1         {sd1:.1f} ms\n"
+        f"SD2         {sd2:.1f} ms\n"
+        f"SD1/SD2     {sd1 / sd2:.3f}"
     )
-    ax4.text(0.05, 0.95, summary, transform=ax4.transAxes, va="top",
-             family="monospace", fontsize=11)
+    ax4.text(0.02, 0.97, summary, transform=ax4.transAxes, va="top",
+             family="monospace", fontsize=10)
 
     fig.suptitle(f"HRV Report — {args.csv}   ({time.strftime('%Y-%m-%d %H:%M')})",
                  fontsize=14, fontweight="bold")
@@ -145,6 +172,12 @@ pNN50  : {pnn50:.1f} %
 LF (0.04–0.15 Hz) : {lf:.1f} ms²
 HF (0.15–0.40 Hz) : {hf:.1f} ms²
 LF/HF             : {lfhf:.3f}
+
+龐加萊圖
+--------
+SD1     : {sd1:.1f} ms
+SD2     : {sd2:.1f} ms
+SD1/SD2 : {sd1 / sd2:.3f}
 
 輸出: {png}
 """)
